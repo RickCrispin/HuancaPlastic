@@ -13,6 +13,7 @@ import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 import { AdminPanel } from './pages/AdminPanel';
+import TestSesiones from './components/TestSesiones';
 import React from 'react';
 import './App.css';
 
@@ -80,6 +81,7 @@ function AppContent() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/test-sesiones" element={<TestSesiones />} />
         </Routes>
       </main>
       <Footer />

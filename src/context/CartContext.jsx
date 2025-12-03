@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services';
 
 export const CartContext = createContext();
 
@@ -11,7 +11,7 @@ export const CartProvider = ({ children }) => {
   // Obtener usuario actual y cargar carrito
   useEffect(() => {
     try {
-      console.log('🔍 CartProvider inicializando...');
+      console.log('[Cart] Initializing CartProvider...');
       const usuario = localStorage.getItem('usuario');
       if (usuario) {
         const usuarioData = JSON.parse(usuario);
@@ -23,9 +23,9 @@ export const CartProvider = ({ children }) => {
         setCart(carritoLocal ? JSON.parse(carritoLocal) : []);
         setCargando(false);
       }
-      console.log('✅ CartProvider listo');
+      console.log('[Cart] CartProvider ready');
     } catch (error) {
-      console.error('❌ Error en CartProvider:', error);
+      console.error('[Cart] CartProvider error:', error);
       setCargando(false);
     }
   }, []);
@@ -74,7 +74,7 @@ export const CartProvider = ({ children }) => {
 
   const addToCart = async (product) => {
     try {
-      console.log('🛒 addToCart llamado con:', product);
+      console.log('[Cart] addToCart called with:', product);
       if (usuarioId) {
         // Guardar en BD
         const existente = cart.find(item => item.id === product.id);
@@ -91,7 +91,7 @@ export const CartProvider = ({ children }) => {
           if (error) throw error;
         } else {
           // Insertar nuevo
-          console.log('📝 Insertando producto en carrito:', {
+          console.log('[Cart] Inserting product:', {
             usuario_id: usuarioId,
             producto_id: product.id,
             cantidad: product.quantity || 1,
@@ -107,10 +107,10 @@ export const CartProvider = ({ children }) => {
             }]);
 
           if (error) {
-            console.error('❌ Error al insertar en carrito:', error);
+            console.error('[Cart] Insert error:', error);
             throw error;
           }
-          console.log('✅ Producto insertado exitosamente');
+          console.log('[Cart] Product inserted successfully');
         }
 
         // Recargar carrito

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PERMISOS, tienePermiso } from '../../constants/rolesPermisos';
-import rolesService from '../../lib/rolesService';
+import { rolesService } from '../../services';
 
 // SVG Icons
 const SVGIconShield = () => (
@@ -90,7 +90,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       setCambiosPendientes({});
     } catch (error) {
       console.error('Error al cargar datos:', error);
-      setMensaje('❌ Error al cargar roles y permisos');
+      setMensaje('Error al cargar roles y permisos: ' + (error.message || 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -99,7 +99,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
   // Detectar cambios en los permisos
   const togglePermiso = (rolId, permisoId) => {
     if (!puedeEditarPermisos) {
-      setMensaje('❌ No tienes permisos para editar');
+      setMensaje('Error: No tienes permisos para editar');
       setTimeout(() => setMensaje(''), 3000);
       return;
     }
@@ -128,7 +128,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       
       await rolesService.asignarPermisosARol(rolId, permisosRol[rolId] || []);
       
-      setMensaje('✅ Permisos del rol actualizados correctamente');
+      setMensaje('Éxito: Permisos del rol actualizados correctamente');
       setCambiosPendientes(prev => {
         const newCambios = { ...prev };
         delete newCambios[rolId];
@@ -139,7 +139,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error('Error al guardar permisos:', error);
-      setMensaje(`❌ Error al guardar: ${error.message}`);
+      setMensaje(`Error al guardar: ${error.message}`);
       setTimeout(() => setMensaje(''), 3000);
     } finally {
       setGuardando(prev => ({ ...prev, [rolId]: false }));
@@ -149,13 +149,13 @@ export const GestorRoles = ({ usuarioAdmin }) => {
   const handleCrearNuevoRol = async () => {
     try {
       if (!nuevoRolNombre.trim()) {
-        setMensaje('❌ El nombre del rol no puede estar vacío');
+        setMensaje('Error: El nombre del rol no puede estar vacío');
         setTimeout(() => setMensaje(''), 3000);
         return;
       }
 
       const nuevoRol = await rolesService.crearRol(nuevoRolNombre, nuevoRolDesc);
-      setMensaje(`✅ Rol "${nuevoRol.nombre}" creado correctamente`);
+      setMensaje(`Éxito: Rol "${nuevoRol.nombre}" creado correctamente`);
       setNuevoRolNombre('');
       setNuevoRolDesc('');
       setModalNuevoRol(false);
@@ -163,7 +163,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error('Error al crear rol:', error);
-      setMensaje(`❌ ${error.message}`);
+      setMensaje(`Error: ${error.message}`);
       setTimeout(() => setMensaje(''), 3000);
     }
   };
@@ -173,7 +173,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
 
     try {
       await rolesService.eliminarRol(rolId);
-      setMensaje('✅ Rol eliminado correctamente');
+      setMensaje('Éxito: Rol eliminado correctamente');
       setRolSeleccionado(null);
       await cargarDatos();
       setTimeout(() => setMensaje(''), 3000);
@@ -186,8 +186,8 @@ export const GestorRoles = ({ usuarioAdmin }) => {
 
   if (!puedeVerRoles) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center', color: '#ef4444', backgroundColor: '#fee2e2', borderRadius: '8px' }}>
-        🔒 No tienes permisos para ver la gestión de roles
+      <div style={{ padding: '20px', textAlign: 'center', color: '#ef4444', backgroundColor: '#fee2e2', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+        <SVGIconShield /> No tienes permisos para ver la gestión de roles
       </div>
     );
   }
@@ -195,7 +195,9 @@ export const GestorRoles = ({ usuarioAdmin }) => {
   if (loading) {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⚙️</div>
+        <div style={{ display: 'inline-block' }}>
+          <SVGIconRefresh />
+        </div>
         <p style={{ margin: '10px 0 0 0', color: '#6b7280' }}>Cargando roles y permisos...</p>
       </div>
     );
@@ -224,7 +226,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ fontSize: '24px' }}>🔐</div>
+          <SVGIconShield />
           <h2 style={{ margin: 0, fontSize: '1.8em', color: '#1f2937', fontWeight: '700' }}>Gestión de Roles y Permisos</h2>
         </div>
         {puedeCrearRol && (
@@ -255,17 +257,17 @@ export const GestorRoles = ({ usuarioAdmin }) => {
       {/* Mensaje */}
       {mensaje && (
         <div style={{
-          backgroundColor: mensaje.includes('❌') ? '#fee2e2' : '#dcfce7',
-          color: mensaje.includes('❌') ? '#991b1b' : '#166534',
+          backgroundColor: mensaje.includes('Error') ? '#fee2e2' : '#dcfce7',
+          color: mensaje.includes('Error') ? '#991b1b' : '#166534',
           padding: '14px 16px',
           borderRadius: '8px',
           marginBottom: '20px',
-          borderLeft: `4px solid ${mensaje.includes('❌') ? '#dc2626' : '#22c55e'}`,
+          borderLeft: `4px solid ${mensaje.includes('Error') ? '#dc2626' : '#22c55e'}`,
           display: 'flex',
           alignItems: 'center',
           gap: '12px'
         }}>
-          {mensaje.includes('❌') ? '❌' : '✅'} {mensaje}
+          {mensaje}
         </div>
       )}
 
@@ -408,7 +410,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2em', color: '#1f2937', fontWeight: '700', textTransform: 'capitalize' }}>
-                  🔑 {rol.rol_nombre}
+                  {rol.nombre}
                 </h3>
                 {rol.descripcion && <p style={{ margin: '6px 0 0 0', color: '#6b7280', fontSize: '0.85em' }}>{rol.descripcion}</p>}
                 {rol.es_predeterminado && (
@@ -422,7 +424,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
                     marginTop: '6px',
                     fontWeight: '600'
                   }}>
-                    ⭐ Predeterminado
+                    Predeterminado
                   </span>
                 )}
               </div>
@@ -603,7 +605,7 @@ export const GestorRoles = ({ usuarioAdmin }) => {
           borderRadius: '12px',
           color: '#6b7280'
         }}>
-          <p style={{ fontSize: '1.1em', marginBottom: '10px' }}>📭 No hay roles disponibles</p>
+          <p style={{ fontSize: '1.1em', marginBottom: '10px' }}>No hay roles disponibles</p>
           {puedeCrearRol && <p style={{ fontSize: '0.9em' }}>Crea el primer rol haciendo clic en "Nuevo Rol"</p>}
         </div>
       )}

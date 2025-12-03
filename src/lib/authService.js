@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { profileService } from './profileService';
+import { sessionService } from './sessionService';
 import bcrypt from 'bcryptjs';
 
 // Función para hacer hash de contraseña
@@ -9,7 +10,7 @@ const hashPassword = async (password) => {
     return await bcrypt.hash(password, salt);
   } catch (error) {
     console.error('Error al hacer hash:', error);
-    return password; // Fallback
+    return password;
   }
 };
 
@@ -19,7 +20,7 @@ const comparePassword = async (password, hash) => {
     return await bcrypt.compare(password, hash);
   } catch (error) {
     console.error('Error al comparar:', error);
-    return password === hash; // Fallback
+    return password === hash;
   }
 };
 
@@ -124,168 +125,132 @@ export const authService = {
 
       console.log('✅ Usuario registrado exitosamente:', usuario.email);
 
-      // Preparar objeto usuario para localStorage
-      const usuarioConDatos = {
+      // Crear sesión segura
+      await sessionService.cerrarTodasLasSesiones(usuario.id);
+      const sesionResultado = await sessionService.crearSesion(usuario.id);
+      
+      if (!sesionResultado.success) {
+        throw new Error('Error al crear sesión inicial');
+      }
+
+      // Preparar objeto usuario (NO guardarlo en localStorage)
+      const usuarioCompleto = {
         id: usuario.id,
         email: usuario.email,
         nombre_completo: usuario.nombre_completo,
         telefono: usuario.telefono || null,
         estado: usuario.estado,
-        rol_id: usuario.rol_id,
-        rol: rolNombre,
-        permisos: [],
+        rol: 'user',
         foto_perfil: perfil?.foto_perfil || null,
         created_at: usuario.created_at
       };
 
-      // Guardar en localStorage
-      localStorage.setItem('usuario', JSON.stringify(usuarioConDatos));
-      if (perfil) localStorage.setItem('perfil', JSON.stringify(perfil));
-
-      return { success: true, usuario: usuarioConDatos };
+      return { 
+        success: true, 
+        usuario: usuarioCompleto,
+        token: sesionResultado.token
+      };
     } catch (error) {
       console.error('Error en registro:', error);
       return { success: false, error: error.message || 'Error al registrar' };
     }
   },
 
-  // Login
+  // Login con sesión segura
   async login(email, password) {
     try {
+      console.log('🔐 Iniciando login para:', email);
+
       if (!email || !password) {
         throw new Error('Email y contraseña son requeridos');
       }
 
-      // Buscar usuario - intentar primero sin relación, luego agregar rol si existe
-      let usuario = null;
-      let usuarioError = null;
-
-      // Intento 1: Consulta simple sin relación
-      const { data: usuarioSimple, error: errorSimple } = await supabase
+      // Buscar usuario
+      const { data: usuario, error: usuarioError } = await supabase
         .from('usuarios')
         .select('*')
         .eq('email', email)
         .single();
 
-      if (errorSimple) {
-        console.error('Error al buscar usuario:', errorSimple);
-        throw new Error('Usuario no encontrado');
+      if (usuarioError || !usuario) {
+        console.error('❌ Usuario no encontrado');
+        throw new Error('Usuario o contraseña incorrectos');
       }
-
-      usuario = usuarioSimple;
-      console.log('✅ Usuario encontrado:', usuario.email);
-      console.log('🔍 Campos del usuario:', Object.keys(usuario));
 
       // Verificar contraseña
       const passwordValida = await comparePassword(password, usuario.password_hash);
-
       if (!passwordValida) {
-        throw new Error('Contraseña incorrecta');
+        console.error('❌ Contraseña incorrecta');
+        throw new Error('Usuario o contraseña incorrectos');
       }
 
-      console.log('✅ Contraseña válida');
+      console.log('✅ Credenciales válidas');
+
+      // Cerrar sesiones antiguas del usuario
+      await sessionService.cerrarTodasLasSesiones(usuario.id);
+
+      // Crear nueva sesión
+      const sesionResultado = await sessionService.crearSesion(usuario.id);
+      if (!sesionResultado.success) {
+        throw new Error('Error al crear sesión');
+      }
+
+      console.log('✅ Sesión creada');
 
       // Actualizar último login
-      try {
-        await supabase
-          .from('usuarios')
-          .update({ ultimo_login: new Date().toISOString() })
-          .eq('id', usuario.id);
-      } catch (updateError) {
-        console.warn('Error al actualizar último login:', updateError);
-      }
-
-      // Obtener rol si existe rol_id
-      let rolNombre = 'user';
-      if (usuario.rol_id) {
-        try {
-          const { data: rol, error: rolError } = await supabase
-            .from('roles')
-            .select('nombre')
-            .eq('id', usuario.rol_id)
-            .single();
-
-          if (!rolError && rol) {
-            rolNombre = rol.nombre;
-            console.log('✅ Rol obtenido:', rolNombre);
-          }
-        } catch (err) {
-          console.warn('Error al obtener rol:', err);
-        }
-      }
+      await supabase
+        .from('usuarios')
+        .update({ ultimo_login: new Date().toISOString() })
+        .eq('id', usuario.id);
 
       // Obtener perfil
-      let perfil = null;
-      try {
-        const { data: perfilData, error: perfilError } = await supabase
-          .from('perfiles_usuarios')
-          .select('*')
-          .eq('usuario_id', usuario.id)
-          .single();
+      const { data: perfil } = await supabase
+        .from('perfiles_usuarios')
+        .select('*')
+        .eq('usuario_id', usuario.id)
+        .single();
 
-        if (!perfilError && perfilData) {
-          perfil = perfilData;
-          console.log('✅ Perfil obtenido');
-        }
-      } catch (err) {
-        console.warn('Error al cargar perfil:', err);
-      }
-
-      // Obtener permisos si existen
-      let permisos = [];
-      try {
-        const { data: permisosData, error: permisosError } = await supabase
-          .from('roles_permisos')
-          .select('permisos:permiso_id(nombre)')
-          .eq('rol_id', usuario.rol_id);
-
-        if (!permisosError && permisosData) {
-          permisos = permisosData.map(p => p.permisos?.nombre).filter(Boolean);
-          console.log('✅ Permisos obtenidos:', permisos.length);
-        }
-      } catch (err) {
-        console.warn('Error al cargar permisos:', err);
-      }
-
-      console.log('✅ Login exitoso. Usuario:', usuario.email, '| Rol:', rolNombre);
-
-      // Preparar objeto usuario para localStorage
-      const usuarioConDatos = {
+      // Preparar objeto usuario (NO guardarlo en localStorage)
+      const usuarioCompleto = {
         id: usuario.id,
         email: usuario.email,
         nombre_completo: usuario.nombre_completo,
-        telefono: usuario.telefono || null,
+        telefono: usuario.telefono,
+        rol: usuario.rol || 'user',
         estado: usuario.estado,
-        rol_id: usuario.rol_id,
-        rol: rolNombre,
-        permisos: permisos,
         foto_perfil: perfil?.foto_perfil || null,
         created_at: usuario.created_at
       };
 
-      // Guardar en localStorage
-      localStorage.setItem('usuario', JSON.stringify(usuarioConDatos));
-      if (perfil) localStorage.setItem('perfil', JSON.stringify(perfil));
+      console.log('✅ Login exitoso:', usuario.email);
 
-      return { success: true, usuario: usuarioConDatos, perfil, permisos };
+      return { 
+        success: true, 
+        usuario: usuarioCompleto,
+        token: sesionResultado.token
+      };
     } catch (error) {
-      console.error('Error en login:', error);
-      return { success: false, error: error.message || 'Error al iniciar sesión' };
+      console.error('❌ Error en login:', error);
+      return { success: false, error: error.message };
     }
   },
 
-  // Logout
-  logout() {
+  // Logout con cierre de sesión en BD
+  async logout() {
     try {
-      // Limpiar todos los datos de sesión
+      // Obtener token de sesión
+      const token = sessionStorage.getItem('token_sesion');
+      
+      if (token) {
+        // Cerrar sesión en base de datos
+        await sessionService.cerrarSesion(token);
+      }
+      
+      // Limpiar todos los datos de sesión (sessionService ya limpia sessionStorage)
       localStorage.removeItem('usuario');
       localStorage.removeItem('perfil');
       localStorage.removeItem('carrito');
       localStorage.removeItem('token');
-      
-      // Limpiar variables de sesión si existen
-      sessionStorage.removeItem('usuario');
-      sessionStorage.removeItem('perfil');
       
       console.log('✅ Sesión cerrada correctamente');
       return { success: true };
@@ -295,20 +260,66 @@ export const authService = {
     }
   },
 
-  // Obtener usuario actual
-  getUsuarioActual() {
-    const usuario = localStorage.getItem('usuario');
-    return usuario ? JSON.parse(usuario) : null;
+  // Obtener usuario actual desde sesión segura
+  async getUsuarioActual() {
+    try {
+      // Obtener token de sesión
+      const token = sessionStorage.getItem('token_sesion');
+      if (!token) {
+        return null;
+      }
+
+      // Validar sesión en base de datos
+      const sesionValida = await sessionService.validarSesion(token);
+      if (!sesionValida) {
+        // Sesión expirada o inválida
+        sessionStorage.removeItem('token_sesion');
+        sessionStorage.removeItem('usuario_id');
+        return null;
+      }
+
+      // Obtener ID de usuario
+      const usuarioId = sessionStorage.getItem('usuario_id');
+      if (!usuarioId) {
+        return null;
+      }
+
+      // Consultar datos actuales del usuario
+      const { data: usuario, error } = await supabase
+        .from('usuarios')
+        .select('id, email, nombre_completo, telefono, rol, estado, created_at')
+        .eq('id', usuarioId)
+        .single();
+
+      if (error || !usuario) {
+        return null;
+      }
+
+      // Obtener perfil
+      const { data: perfil } = await supabase
+        .from('perfiles_usuarios')
+        .select('foto_perfil')
+        .eq('usuario_id', usuario.id)
+        .single();
+
+      return {
+        ...usuario,
+        foto_perfil: perfil?.foto_perfil || null
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario actual:', error);
+      return null;
+    }
   },
 
   // Verificar si está autenticado
-  estaAutenticado() {
-    return !!this.getUsuarioActual();
+  async estaAutenticado() {
+    return await sessionService.haySesionActiva();
   },
 
   // Verificar si es admin
-  esAdmin() {
-    const usuario = this.getUsuarioActual();
+  async esAdmin() {
+    const usuario = await this.getUsuarioActual();
     return usuario?.rol === 'admin';
   }
 };

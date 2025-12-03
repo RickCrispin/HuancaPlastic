@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { authService } from '../lib/authService';
+import { authService } from '../services';
 
 export const AuthContext = createContext();
 
@@ -19,25 +19,36 @@ export const AuthProvider = ({ children }) => {
   const lastActivityRef = useRef(Date.now());
   const countdownIntervalRef = useRef(null);
 
-  // Cargar usuario al iniciar
+  // Cargar usuario al iniciar - validar sesión
   useEffect(() => {
-    try {
-      console.log('🔍 AuthProvider inicializando...');
-      const usuarioActual = authService.getUsuarioActual();
-      console.log('🔍 Cargando usuario en AuthContext:', usuarioActual?.email, 'Rol:', usuarioActual?.rol);
-      if (usuarioActual) {
-        setUsuario(usuarioActual);
-        // Verificar si es admin comparando el campo 'rol' (ya normalizado en authService)
-        const isAdmin = usuarioActual?.rol === 'admin';
-        setEsAdmin(isAdmin);
-        console.log('👤 Usuario establecido. ¿Es admin?', isAdmin, '| Rol:', usuarioActual?.rol);
+    const cargarUsuario = async () => {
+      try {
+        console.log('[Auth] Initializing AuthProvider...');
+        const usuarioActual = await authService.getUsuarioActual();
+        console.log('[Auth] Session validated:', usuarioActual?.email, 'Role:', usuarioActual?.rol);
+        
+        if (usuarioActual) {
+          setUsuario(usuarioActual);
+          const isAdmin = usuarioActual?.rol === 'admin';
+          setEsAdmin(isAdmin);
+          console.log('[Auth] User set. Is admin?', isAdmin, '| Role:', usuarioActual?.rol);
+        } else {
+          console.log('[Auth] No active session');
+          setUsuario(null);
+          setEsAdmin(false);
+        }
+        
+        setCargando(false);
+        console.log('[Auth] AuthProvider ready');
+      } catch (error) {
+        console.error('[Auth] AuthProvider error:', error);
+        setUsuario(null);
+        setEsAdmin(false);
+        setCargando(false);
       }
-      setCargando(false);
-      console.log('✅ AuthProvider listo');
-    } catch (error) {
-      console.error('❌ Error en AuthProvider:', error);
-      setCargando(false);
-    }
+    };
+
+    cargarUsuario();
   }, []);
 
   // Inicializar detector de inactividad cuando usuario cambia
@@ -98,9 +109,9 @@ export const AuthProvider = ({ children }) => {
   }, [usuario, mostrarAdvertencia]);
 
   // Logout automático
-  const logoutAutomatico = () => {
+  const logoutAutomatico = async () => {
     setMostrarAdvertencia(false);
-    logout();
+    await logout();
   };
 
   // Función para login
@@ -108,23 +119,34 @@ export const AuthProvider = ({ children }) => {
     try {
       const resultado = await authService.login(email, password);
       if (resultado.success) {
-        console.log('✅ Login exitoso:', resultado.usuario?.email, 'Rol:', resultado.usuario?.rol);
+        console.log('[Auth] Login successful:', resultado.usuario?.email, 'Role:', resultado.usuario?.rol);
         setUsuario(resultado.usuario);
         setEsAdmin(resultado.usuario?.rol === 'admin');
         setMostrarAdvertencia(false);
+        
+        // Guardar usuario en sessionStorage como fallback para verificaciones
+        sessionStorage.setItem('usuario', JSON.stringify({
+          id: resultado.usuario.id,
+          email: resultado.usuario.email,
+          nombre_completo: resultado.usuario.nombre_completo,
+          rol: resultado.usuario.rol,
+          rol_id: resultado.usuario.rol_id,
+          estado: 'activo'
+        }));
+        
         return { success: true, usuario: resultado.usuario };
       } else {
         throw new Error(resultado.error);
       }
     } catch (error) {
-      console.error('❌ Error en login:', error);
+      console.error('[Auth] Login error:', error);
       return { success: false, error: error.message };
     }
   };
 
   // Función para register
-  const register = async (email, password, nombreCompleto, telefono, ciudad, pais, bio) => {
-    const resultado = await authService.register(email, password, nombreCompleto, telefono, ciudad, pais, bio);
+  const register = async (email, password, nombreCompleto, telefono, perfilData = {}) => {
+    const resultado = await authService.register(email, password, nombreCompleto, telefono, perfilData);
     if (resultado.success) {
       setUsuario(resultado.usuario);
       setEsAdmin(resultado.usuario?.rol === 'admin');
@@ -134,15 +156,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Función para logout
-  const logout = () => {
+  const logout = async () => {
     if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
     if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
-    authService.logout();
+    await authService.logout();
     setUsuario(null);
     setEsAdmin(false);
     setMostrarAdvertencia(false);
+    
+    // Limpiar usuario en sessionStorage
+    sessionStorage.removeItem('usuario');
   };
 
   // Función para continuar sesión

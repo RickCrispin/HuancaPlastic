@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useCart } from '../hooks/useCart';
-import { productsService } from '../lib/productsService';
+import { productsService, categoriesService } from '../services';
 
 export const Store = () => {
   const { addToCart } = useCart();
@@ -8,6 +8,7 @@ export const Store = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   // Cargar productos de Supabase con sincronización en tiempo real
@@ -17,20 +18,31 @@ export const Store = () => {
         const data = await productsService.getAllProducts();
         if (data && data.length > 0) {
           setProductos(data);
-          console.log(`✅ Cargados ${data.length} productos de Supabase`);
+          console.log(`[Store] Loaded ${data.length} products from database`);
         }
       } catch (error) {
-        console.error('Error cargando productos:', error);
+        console.error('[Store] Error loading products:', error);
       } finally {
         setCargando(false);
       }
     };
 
+    const cargarCategorias = async () => {
+      try {
+        const data = await categoriesService.getAllCategorias();
+        setCategorias(data);
+        console.log(`[Store] Loaded ${data.length} categories from database`, data);
+      } catch (error) {
+        console.error('[Store] Error loading categories:', error);
+      }
+    };
+
     cargarProductos();
+    cargarCategorias();
 
     // Suscribirse a cambios en tiempo real
     const handleProductChange = async (payload) => {
-      console.log('📡 Cambio detectado en productos:', payload.eventType);
+      console.log('[Store] Product change detected:', payload.eventType);
       const data = await productsService.getAllProducts();
       if (data) {
         setProductos(data);
@@ -47,23 +59,19 @@ export const Store = () => {
     };
   }, []);
 
-  // Mapeo de categorías
-  const categoriasMap = {
-    1: 'hogar',
-    2: 'industrial',
-    3: 'muebles',
-    4: 'organizacion'
-  };
-
+  // Filtrado de productos
   const filteredProducts = useMemo(() => {
     return productos.filter(product => {
-      const categoria = categoriasMap[product.categoria_id] || '';
       const nombre = product.nombre || '';
       const descripcion = product.descripcion || '';
       
-      const matchesCategory = selectedFilter === 'todos' || categoria === selectedFilter;
+      // Filtro por categoría (UUID)
+      const matchesCategory = selectedFilter === 'todos' || product.categoria_id === selectedFilter;
+      
+      // Filtro por búsqueda
       const matchesSearch = nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            descripcion.toLowerCase().includes(searchTerm.toLowerCase());
+      
       return matchesCategory && matchesSearch;
     });
   }, [selectedFilter, searchTerm, productos]);
@@ -148,26 +156,58 @@ export const Store = () => {
             flexWrap: 'wrap',
             justifyContent: 'center'
           }}>
-            {['todos', 'hogar', 'industrial', 'muebles', 'organizacion'].map(cat => (
-              <button
-                key={cat}
-                onClick={() => setSelectedFilter(cat)}
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '25px',
-                  cursor: 'pointer',
-                  fontSize: '0.95em',
-                  fontWeight: 'bold',
-                  transition: 'all 0.3s ease',
-                  backgroundColor: selectedFilter === cat ? '#2563eb' : '#fff',
-                  color: selectedFilter === cat ? '#fff' : '#333',
-                  boxShadow: selectedFilter === cat ? '0 4px 10px rgba(37, 99, 235, 0.3)' : '0 2px 5px rgba(0,0,0,0.1)'
-                }}
-              >
-                {cat.charAt(0).toUpperCase() + cat.slice(1)}
-              </button>
-            ))}
+            {/* Botón "Todos" */}
+            <button
+              onClick={() => {
+                console.log('🔵 Filtro seleccionado: todos');
+                setSelectedFilter('todos');
+              }}
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '25px',
+                cursor: 'pointer',
+                fontSize: '0.95em',
+                fontWeight: 'bold',
+                transition: 'all 0.3s ease',
+                backgroundColor: selectedFilter === 'todos' ? '#2563eb' : '#fff',
+                color: selectedFilter === 'todos' ? '#fff' : '#333',
+                boxShadow: selectedFilter === 'todos' ? '0 4px 10px rgba(37, 99, 235, 0.3)' : '0 2px 5px rgba(0,0,0,0.1)'
+              }}
+            >
+              Todos
+            </button>
+
+            {/* Botones de categorías dinámicas */}
+            {categorias.length > 0 ? (
+              categorias.map(categoria => (
+                <button
+                  key={categoria.id}
+                  onClick={() => {
+                    console.log(`🔵 Filtro seleccionado: ${categoria.nombre} (ID: ${categoria.id})`);
+                    setSelectedFilter(categoria.id);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '25px',
+                    cursor: 'pointer',
+                    fontSize: '0.95em',
+                    fontWeight: 'bold',
+                    transition: 'all 0.3s ease',
+                    backgroundColor: selectedFilter === categoria.id ? '#2563eb' : '#fff',
+                    color: selectedFilter === categoria.id ? '#fff' : '#333',
+                    boxShadow: selectedFilter === categoria.id ? '0 4px 10px rgba(37, 99, 235, 0.3)' : '0 2px 5px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {categoria.nombre}
+                </button>
+              ))
+            ) : (
+              <p style={{ color: '#999', fontSize: '0.9em' }}>
+                Cargando categorías...
+              </p>
+            )}
           </div>
 
           {/* Mensaje si no hay productos */}

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
-import { ordersService } from '../lib/ordersService';
-import { authService } from '../lib/authService';
+import { ordersService, authService } from '../services';
 
 export const Cart = () => {
   const { cart, removeFromCart, updateQuantity, clearCart, getTotal, cargando } = useCart();

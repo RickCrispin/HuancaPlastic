@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import { profileService } from '../lib/profileService';
+import { supabase, profileService } from '../services';
 
 // Ciudades del Perú
 const CIUDADES_PERU = [

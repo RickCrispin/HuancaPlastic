@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { productsService } from '../lib/productsService';
+import { productsService } from '../services';
 
 export const Home = () => {
   const [topProducts, setTopProducts] = useState([]);
